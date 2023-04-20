@@ -33,24 +33,27 @@ func Start(port int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go setEventsFlag()
+	go setEventsFlag(ctx)
 
 	go processEvents(ctx)
 
 	logger.LogIfError(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
 }
 
-func setEventsFlag() {
+func setEventsFlag(ctx context.Context) {
 	ticker5min := time.NewTicker(305 * time.Second)
 	ticker1min := time.NewTicker(60 * time.Second)
-
-	select {
-	case <-ticker5min.C:
-		// turns successfully sending events OFF
-		successfulEvents = false
-	case <-ticker1min.C:
-		// turns successfully sending events ON
-		successfulEvents = true
+	for {
+		select {
+		case <-ticker5min.C:
+			// turns successfully sending events OFF
+			successfulEvents = false
+		case <-ticker1min.C:
+			// turns successfully sending events ON
+			successfulEvents = true
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
