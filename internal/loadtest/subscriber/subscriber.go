@@ -20,7 +20,7 @@ import (
 
 var evtChn chan *event.Event
 var received map[string]*tree.Node
-var flag bool
+var successfulEvents bool
 
 func Start(port int) {
 	http.HandleFunc("/", handler) // sink
@@ -33,29 +33,43 @@ func Start(port int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	go setEventsFlag()
+
 	go processEvents(ctx)
 
 	logger.LogIfError(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
 }
 
+func setEventsFlag() {
+	ticker5min := time.NewTicker(305 * time.Second)
+	ticker1min := time.NewTicker(60 * time.Second)
+
+	select {
+	case <-ticker5min.C:
+		// turns successfully sending events OFF
+		successfulEvents = false
+	case <-ticker1min.C:
+		// turns successfully sending events ON
+		successfulEvents = true
+	}
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
-	if flag {
-		flag = false
+	if successfulEvents {
 		event, err := cloudevents.NewEventFromHTTPRequest(r)
 		if err != nil {
 			log.Printf("failed to parse CloudEvent from request: %v", err)
 			return
 		}
 		evtChn <- event
+		log.Printf("successfully received event, STATUS 200")
 		w.WriteHeader(http.StatusOK)
 		return
 	} else {
-		flag = true
-		log.Printf("failed to receive event, Status 500")
+		log.Printf("failed to receive event, STATUS 500")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
 }
 
 func processEvents(ctx context.Context) {
